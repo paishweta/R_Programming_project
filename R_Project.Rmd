@@ -1,0 +1,909 @@
+---
+    title: "Russo-Ukrainian war: an investigation of democracy"
+output: 
+    html_document:
+    toc: TRUE
+fig_width: 8
+fig_height: 6
+code_folding: "hide"
+---
+    
+    <style>
+    body {
+        text-align: justify}
+</style>
+    
+    ```{r setup, include=FALSE}
+knitr::opts_chunk$set( 
+    echo=TRUE, 
+    warning=FALSE, 
+    message=FALSE, 
+    fig.align = 'left')
+```
+
+
+```{r}
+library(dplyr)     # Data manipulation
+library(tidyr)     # Pivotting
+library(ggplot2)   # Visualization
+library(readr)     # To import CSV files
+library(stringr)   # Regex and string operations
+library(ggthemes)  # Extra themes for ggplot2
+#devtools::install_github("rensa/ggflags")
+#library(ggflags)   # Flags of countries
+library(ggforce)   # An alternative for facetting
+library(ggtext)    # A flexible text styling
+```
+
+# Motivation
+
+>History proves that all dictatorships, all authoritarian forms of government are transient. Only democratic systems are not transient. Whatever the shortcomings, mankind has not devised anything superior.^[https://www.brainyquote.com/quotes/vladimir_putin_131451]
+
+Can you guess who is behind the quote?
+    
+    A good answer would be one of these gentlemen:
+    
+    ![](https://i.imgur.com/jaXHuIq.png)^[https://slideplayer.com/slide/14996749/]
+
+Let me help you by providing another quote by him:
+    
+    >The Russian people chose democracy at the beginning of the 1990s and this was their final choice.^[https://www.azquotes.com/quote/1518058]
+
+![](https://pbs.twimg.com/media/FNKX8WyWQAI7eE7?format=jpg&name=900x900)
+
+Yes, you're right. Those are words of Putin, The Savior of Democracy!
+
+>Nobody and nothing will stop Russia on the road to strengthening democracy and ensuring human rights and freedoms.^[https://www.azquotes.com/quote/237306]
+
+After months of speculation, Putin finally launched  the full-scale invasion of Ukraine. In his [televised speech](https://www.smh.com.au/world/europe/full-transcript-of-vladimir-putin-s-speech-announcing-a-special-military-operation-20220224-p59zhq.html) right at the beginning of the aggression, he revealed some of his motivations in waging a full-fledged war (or as he wants others to believe a "special military operation"). To rescue people who were abused by genocide for eight years (right after the escape of his beloved Ukrainian president [Viktor Yushchenko](https://en.wikipedia.org/wiki/Viktor_Yushchenko)), “We will strive for the **demilitarization and de-Nazification** of Ukraine, as well as bringing to justice those who committed numerous bloody crimes against civilians.”^[https://www.vox.com/2022/2/24/22948944/putin-ukraine-nazi-russia-speech-declare-war] Is the president of Ukraine really a fascist dictator like Hitler?
+
+First of all, [Volodymyr Zelenskyy](https://en.wikipedia.org/wiki/Volodymyr_Zelenskyy) is Jewish and he was elected by 73% of the votes in the 2019 presidential election. **"[Putin is] not afraid of Nazis in Ukraine. He’s afraid of democracy in Ukraine. And he recognizes that as democracy encroaches upon Russia as it comes closer to Russia, there’s a threat that those people will demand democracy,**"^[https://time.com/6154493/denazification-putin-ukraine-history-context/] explains [Jeffrey Veidlinger](Jeffrey Veidlinger) a professor of history at the University of Michigan.
+
+Now we can pinpoint **democracy** as Putin's main motivation to invade Ukraine. Let's have a deeper look at the state of democracy in Ukraine and Russia.
+
+
+# What are democracy indices?
+
+Because democracy is such a broad term that covers the interactions between many institutions in a society, measuring it quantitatively is anything but easy. Therefore, several organizations publish some key indices defined to include the true state of democracy in different countries. 
+
+[International Institute for Democracy and Electoral Assistance](https://www.idea.int) (International IDEA) publishes [annual global state of democracy (GSoD)](https://www.idea.int/our-work/what-we-do/global-state-democracy) which is mainly based on analyses and measurements by the [V-Dem Institute](http://www.v-dem.net/) (Varieties of Democracy). The V-Dem Institute's measures of democracy are the most elaborate and granular among several well-known democracy indexes (such as the [Polity data series](https://en.wikipedia.org/wiki/Polity_data_series) and [Freedom House](https://en.wikipedia.org/wiki/Freedom_House)'s [Freedom in the World](https://en.wikipedia.org/wiki/Freedom_in_the_World))^[https://en.wikipedia.org/wiki/V-Dem_Institute]. In the image below you can see an overview of indices and subattributes of GSoD 2021. 
+
+![](https://www.idea.int/gsod/sites/default/files/inline-images/GSoD%20conceptual%20framework.png)
+
+To avoid [confirmation bias](https://en.wikipedia.org/wiki/Confirmation_bias) ([cherry picking](https://en.wikipedia.org/wiki/Cherry_picking)), none of the subattributes of the main indices were excluded. 
+
+```{r}
+
+data <- read_csv("../input/the-global-state-of-democracy-indices/GSoDI_v5.1.csv")
+
+head(data)
+```
+
+The dataset consists of many variables which are different attributes, subattributes, and indicators. We can select and rename our desired variables (subattributes) according to the [codebook](https://www.idea.int/gsod-indices/sites/default/files/inline-files/global-state-of-democracy-indices-codebook-v5.pdf) provided with the dataset.
+```{r}
+
+attributes <- tibble(attribute = c("A1", "A2", "A3", "A4", "A5"),
+                     indices = c(
+                       "Representative Government ",
+                       "Fundamental Rights",
+                       "Checks on Government",
+                       "Impartial Administration",
+                       "Participatory Engagement"
+                       )
+                     ) 
+
+data <- data %>% 
+  select(ID_country_name, ID_year, C_SD11, C_SD12,
+         C_SD13, C_SD14, C_SD21, C_SD22A, C_SD22B,
+         C_SD22C, C_SD22D, C_SD22E, C_SD23A, C_SD23B, 
+         C_SD23C, C_SD31, C_SD32, C_SD33, C_SD41, 
+         C_SD42, C_SD51, C_SD52, C_SD53, C_SD54, 
+         democratic_performance_name,
+         democratic_performance_numeric) %>%
+  rename(country = ID_country_name, 
+         year = ID_year,  
+         clean_elections_A1 = C_SD11, 
+         inclusive_suffrage_A1 = C_SD12,
+         free_political_parties_A1 = C_SD13, 
+         elected_government_A1 = C_SD14, 
+         access_to_justice_A2 = C_SD21, 
+         freedom_of_expression_A2 = C_SD22A, 
+         freedom_of_association_and_assembly_A2 = C_SD22B,
+         freedom_of_religion_A2 = C_SD22C, 
+         freedom_of_movement_A2 = C_SD22D, 
+         personal_integrity_and_security_A2 = C_SD22E, 
+         social_group_equality_A2 = C_SD23A, 
+         basic_welfare_A2 = C_SD23B, 
+         gender_equality_A2 = C_SD23C, 
+         effective_parliament_A3 = C_SD31, 
+         judicial_independence_A3 = C_SD32,  
+         media_integrity_A3 = C_SD33, 
+         absence_of_corruption_A4 = C_SD41,  
+         predictable_enforcement_A4 = C_SD42, 
+         civil_society_participation_A5 = C_SD51, 
+         electoral_participation_A5 = C_SD52,
+         direct_democracy_A5 = C_SD53, 
+         local_democracy_A5 = C_SD54) %>%
+  filter(country %in% c("Russia", "Ukraine", "World") &
+           year >= 1991)
+
+head(data)
+```
+
+
+# The summary of the notebook
+
+## The latest state of democracy in the two nations
+
+The bar graph below is the main result of the notebook. It consists of the latest values of all the attributes and subattributes of the [Global State of Democracy indices](https://www.idea.int) for Ukraine, Russia, and the world in 2020. 
+
+```{r fig.width=8, fig.height=10}
+
+data %>%
+  filter(year == 2020) %>%
+  select(-c(
+    year, 
+    democratic_performance_name, 
+    democratic_performance_numeric
+    )
+  ) %>%
+  pivot_longer(!country, 
+               names_to = "subattribute",
+               values_to = "value") %>%
+  mutate(attribute = str_extract(subattribute, "A\\d$")) %>%
+  left_join(attributes) %>%
+  mutate(country = factor(country, 
+                          levels = c("World", "Ukraine", "Russia"), 
+                          ordered = TRUE),
+         subattribute = str_replace_all(subattribute, "_", " "),
+         subattribute = str_remove(subattribute, "A\\d"),
+         subattribute = str_to_sentence(subattribute)) %>%
+  ggplot(aes(subattribute, value, fill = country)) +
+  geom_col(width = 0.7, position = "dodge") +
+  facet_col(~indices, 
+             scales = "free",
+             space = "free") +
+  coord_flip() +
+  scale_fill_manual(values = c(Russia = "#D62828", 
+                               World = "#004266",
+                               Ukraine = "#FCB322"
+                               )
+                    ) +
+  theme_hc() +
+  theme(
+    axis.text = element_text(face = "bold", color = "grey40"),
+    axis.title = element_text(color = "grey40"),
+    plot.title = element_markdown(hjust = 1, color = "grey40"),
+    plot.subtitle = element_text(color = "grey40"),
+    legend.position = "none",
+    strip.background = element_rect(fill = "lavender"),
+    strip.text = element_text(face = "bold", color = "grey40")) +
+  labs(title = "Subattributes of democracy in <span style = 'color:#004266;'>                  the world</span>, <span style = 'color:#FCB322;'>Ukraine
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              </span>, and <span style = 'color:#D62828;'>Russia</span>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              in 2020",
+       subtitle = "The values are between 0 and 1; higher is better",
+       x = NULL)
+```
+
+At the end of 2020 Ukraine did better than Russia in 18 out of 22 democracy-related items. It also scored better than the world average in more than half of the attributes. So, in contrast to what Kremlin asserts, **not only Ukraine is not a "neo-Nazi" or "fascist" state but is far more democratic than Russia**. 
+
+
+## Historical sate of democracy: russia vs Ukraine
+
+
+```{r}
+# Defining a function for drawing plots
+
+theme_costum <- function (base_size = 11, base_family = "") {
+  theme_classic() +
+    theme(
+      plot.title = element_text(color = "grey40"),
+      plot.subtitle = element_text(color = "grey40"),
+      axis.title = element_text(color = "grey40"),
+      axis.line = element_line(color = "grey70", size = 1),
+      axis.ticks = element_line(color = "grey70"),
+      axis.text = element_text(color = "grey40"),
+      legend.position = "none"
+    )
+}
+
+data %>%
+  filter(country %in% c("Russia", "Ukraine")) %>%
+  mutate(country_code = ifelse(country == "Ukraine", "ua", "ru")) %>%
+  ggplot(aes(year, reorder(democratic_performance_name,
+                           -democratic_performance_numeric),
+             group = country
+             )
+         ) +
+  geom_point(aes(year, 
+                 reorder(democratic_performance_name,
+                         -democratic_performance_numeric),
+                 col = country
+                 ), 
+             size = 3
+             ) +
+  ggbump::geom_bump(aes(col = country), 
+                    size = 2, 
+                    lineend = "round") +
+  scale_color_manual(values = c(Russia = "#D62828",
+Ukraine = "#FCB322"
+)
+) +
+    #geom_flag(data = . %>% 
+    #           filter(year == max(year)),
+    #        aes(x = year + 1, 
+    #           y = democratic_performance_name,
+    #          country = country_code
+    #         )
+    #    ) +
+    labs(title = "Government systems in <span style = 'color:#FCB322;'>Ukraine
+                </span> and <span style = 'color:#D62828;'>Russia</span>
+                from 1991 to 2020",
+         y = "The ruling system"
+    ) +
+    theme_costum() +
+    theme(
+        panel.background = element_rect(fill = "grey99"),
+        legend.position = "none",
+        plot.title = element_markdown()
+    )
+```
+
+Both Ukraine and Russia entered the 90s as a hybrid regime. Both countries began the 21 century as democratic nations (although weak ones). But their path began to change when Putin became the president in 2000 leading his country into a more authoritarian regime. In contrast, as soon as Zelenskyy got the post in 2019, Ukraine experienced a great leap towards a full-fledged democracy. Now we can confer why Putin's fear of democracy is so urgent.
+
+The rest of the notebook deal with the historical state of attributes and subattributes in Ukraine, Russia, and the world in detail.
+
+```{r}
+
+graph_index <- function(index){
+  subattribute <- as.character(index) %>%
+    str_replace_all("_", " ") %>%
+    str_remove_all("A\\d") %>%
+    str_to_sentence()
+  
+  ggplot() +
+    geom_path(data = data, 
+              aes(year, 
+                  .data[[index]],
+                  group = country,
+                  col = country
+                  ), 
+              size = 1.5
+              ) +
+    scale_color_manual(values = c(Russia = "#D62828", 
+                                  World = "#004266",
+                                  Ukraine = "#FCB322"
+                                  )
+                       ) +
+    scale_y_continuous(expand = c(0, 0)) +
+    scale_x_continuous(n.breaks = 6) +
+    labs(title = 
+           str_c(subattribute,
+                 "in <span style = 'color:#004266;'>the world</span>, 
+    <span style = 'color:#FCB322;'>Ukraine</span>, and 
+<span style = 'color:#D62828;'>Russia</span>
+    from 1991 to 2020"),
+         subtitle = "The values are between 0 and 1; higher is better",
+         y = subattribute
+         ) +
+    theme_costum() +
+  theme(plot.title = element_markdown())
+}
+```
+
+# The state of democracy indices in the last 30 years
+
+Now is the time to delve deeper into the details of the historical trends of different indices of democracy. The brief introduction for each attribute and subattribute is mostly from the attached [codebook](https://www.idea.int/gsod-indices/sites/default/files/inline-files/global-state-of-democracy-indices-codebook-v5.pdf) of the GSod dataset.
+
+## Representative government
+
+
+The representative government attribute emphasizes contested and inclusive popular elections for legislative and executive offices. This attribute distinguishes among four subattributes. Three of them (clean elections,
+free political parties, and elected government) have been aggregated into a contestation index using [Bayesian factor analysis](https://en.wikipedia.org/wiki/Bayes_factor). The representative government index is obtained by multiplying the contestation index
+by the fourth subattribute, inclusive suffrage.
+
+### Clean elections
+
+
+The clean elections subattribute denotes the extent to which elections for national, representative political offices are free from irregularities. Two of the indicators reflect free elections more generally, whereas the other indicators capture more specific aspects of this feature, such as
+irregularities in voter registration and government intimidation.
+
+```{r}
+Ukraine_seg = tibble(x = rep(c(2004, 2010, 2019), 2), 
+                     xend = rep(c(2004, 2010, 2019), 2),
+                     y = c(rep(0.7, 3), rep(0.28, 3)), 
+                     yend =c(rep(0.8, 3), rep(0.32, 3))
+                     )
+
+Russia_seg = tibble(x = c(2000, 2011),
+                    xend = c(2000, 2011),
+                    y = rep(0.28, 2),
+                    yend = rep(0.42, 2))
+
+Ukraine_label = tibble(x = c(2004, 2010, 2019),
+                       y = rep(0.75, 3),
+                       label = c("The orange revolution",
+                                 "Russophile Yanukovych became\nUkraine's president",
+                                 "Zelensky became\npresident"))
+
+graph_index("clean_elections_A1") +
+  geom_segment(data = Ukraine_seg, 
+               aes(x = x, xend = xend, 
+                   y = y, yend = yend
+                   ),
+               color = "#FCB322"
+               ) +
+  geom_segment(data = Russia_seg, 
+               aes(x = x, xend = xend, 
+                   y = y, yend = yend
+                   ),
+               color = "#D62828"
+               ) +
+  geom_label(data = Ukraine_label, 
+             aes(x = x, y = y, label = label),
+             label.size = NA,
+             label.padding = unit(0, "lines"),
+             size = 3
+             ) +
+  geom_label(aes(x = 2000,
+                 y = 0.36, 
+                 label = "Putin's presidency\nbegan"
+                 ),
+             label.size = NA,
+             size = 3
+             ) +
+  geom_label(aes(x = 2011, 
+                 y = 0.36, 
+                 label = "The worst protests\nafter the fall of USSR"
+                 ),
+             label.size = NA,
+             size = 3
+             )
+```
+
+After Putin's inauguration, Russia's path in this subattribute was steadily downward. On the other hand, Ukraine improved its grave situation after [the Orange Revolution](https://en.wikipedia.org/wiki/Orange_Revolution) under Yushchenko's administration. However, the state of clean elections deteriorated under Yanukovych's administration, and finally, it improved largely after Zelenskyy became the president.
+
+### Inclusive suffrage
+
+The inclusive suffrage subattribute denotes the extent to which adult citizens have equal and universal passive and active voting rights.
+
+```{r}
+graph_index("inclusive_suffrage_A1")
+```
+
+In this subattribute the latest score for Ukraine and Russia are the same as the world's average. However, while Russia gradually descended from its initial superior state after the collapse of the Soviet Union, Ukraine improved.
+
+### Free political parties
+
+The free political parties subattribute denotes the extent to which political parties are free to form and campaign for political office. Six indicators, partly based on expert surveys and partly in-house coded, are used to measure
+how free political parties are. All of them reflect whether political parties generally, and opposition parties in particular, are allowed to organize freely and run in elections.
+
+```{r}
+Ukraine_seg = tibble(x = rep(2010, 2),
+                     xend = rep(2010, 2),
+                     y = c(0.35, 0.65),
+                     yend = c(0.38, 0.75)
+                     )
+
+graph_index("free_political_parties_A1") +
+  geom_segment(data = Ukraine_seg,
+               aes(x = x, y = y, xend = xend, yend = yend), 
+               color = "#FCB322"
+) +
+    geom_segment(aes(x = 2000,
+                     y = 0.35,
+                     xend = 2000,
+                     yend = 0.41
+    ),
+    color = "#D62828"
+    ) +
+    geom_label(aes(x = 2010,
+                   y = 0.7, 
+                   label = "Russophile Yanukovych became \n Ukraine's president"
+    ),
+    label.size = NA,
+    size = 3
+    ) +
+    geom_label(aes(x = 2000,
+                   y = 0.38,
+                   label = "Putin became president",
+    ),
+    label.size = NA,
+    size = 3
+    )
+```
+
+Yanukovych's presidency was a turning point for the freedom of political parties in Ukraine. There are allegations of attempts to destroy the opposition party during his term^[https://en.wikipedia.org/wiki/Viktor_Yanukovych#Alleged_attempt_to_remove_opposition]. In Russia, after Putin became the leader, opposition to his own party became more restricted^[https://www.europarl.europa.eu/RegData/etudes/ATAG/2014/545703/EPRS_ATA(2014)545703_REV1_EN.pdf].
+
+### Elected government
+
+The elected government subattribute denotes the extent to which national and representative government offices are filled through elections. All the indicators have a rather formal focus, which means that they do not assess the quality of elections or fully capture the extent to which reserved domains and undue influence from non-elected groups might in practice restrict elected officials’ effective power to govern.
+
+```{r}
+graph_index("elected_government_A1") +
+  geom_segment(aes(x = rep(2014,2),
+                   y = c(1, 0.5),
+                   xend = rep(2014,2),
+                   yend = c(1.1, 0.55)
+                   ),
+               color = "#FCB322"
+               ) +
+  geom_label(aes(x = 2014, 
+                 y = 1.05,
+                 label = "Independence of Crimea,\nDonetsk and Luhansk"
+                 ),
+             label.size = NA,
+             size = 3
+             )
+```
+
+Aside from the Independence of Crimea, Donetsk, and Luhansk in 2014 Both countries experienced a constant state of the *elected government* subattribute.
+
+## Fundamental rights
+
+Fundamental Rights in the form of liberal and social rights support both fair representation and the vertical mechanism of accountability that the first attribute seeks to achieve. This attribute is composed of three subattributes: access to justice, civil liberties, and social rights and equality. Each of these three attributes is divided into several subcomponents which are presented in the notebook.
+
+### Freedom of expression
+
+The freedom of expression subcomponent is measured using indicators from [V-Dem](https://v-dem.net/), [CLD](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/0TKJWX), and [CIRIGHTS](http://www.humanrightsdata.com/). The
+questions underlying the CLD and CIRIGHTS variables are fairly encompassing, whereas the V-Dem variables are more specific and refer to different aspects of media freedom and to the right to openly discuss political issues and express political opinions outside the mass media.
+
+```{r}
+
+Ukraine_seg = tibble(x = rep(c(2004, 2005, 2010, 2014), 2),
+                     y = c(rep(0.67, 4), rep(0.35, 4)),
+                     xend = rep(c(2004, 2005, 2010, 2014), 2),
+                     yend = c(rep(0.78, 4), rep(0.38, 4))
+                     )
+graph_index("freedom_of_expression_A2") +
+  geom_segment(data = Ukraine_seg,
+               aes(x = x, y = y, xend = xend, yend = yend),
+               color = "#FCB322"
+               ) +
+  geom_segment(aes(x = 2000, y = 0.35, xend = 2000, yend = 0.45),
+               color = "#D62828"
+               ) +
+  geom_label(aes(x = c(2004, 2007.5, 2014),
+                 y = rep(0.72, 3),
+                 label = c("Orange\nRevolution",
+                           "Yushchenko's\npresidency",
+                           "Revolution of Dignity;\nIndependence of Crimea,\nDonetsk and Luhansk")
+                 ),
+             label.size = NA,
+             size = 3,
+             label.padding = unit(0, "lines")
+             ) +
+  geom_label(aes(x = 2000, y = 0.4, label = "Putin took office"),
+             label.size = NA,
+             size = 3
+             ) 
+```
+After a period of stability in Russia, Putin made Russia a worse place for freedom of expression. Following [The Orange Revolution](https://en.wikipedia.org/wiki/Orange_Revolution) in Ukraine, freedom of expression became more restricted. It bounced back under Yushchenko's presidency but again deteriorated after [The Revolution of Dignity](https://en.wikipedia.org/wiki/Revolution_of_Dignity) in 2014. 
+
+### Freedom of association and assembly
+
+This subcomponent is an aggregate of six indicators that directly refer to freedom of association for political and civil groups. These six indicators were
+aggregated into the freedom of association and assembly subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+
+Ukraine_seg = tibble(x = rep(c(2004, 2005, 2010, 2014), 2),
+                     y = c(rep(0.7, 4), rep(0.35, 4)),
+                     xend = rep(c(2004, 2005, 2010, 2014), 2),
+                     yend = c(rep(0.84, 4), rep(0.4, 4))
+                     )
+
+graph_index("freedom_of_association_and_assembly_A2") +
+  geom_segment(data = Ukraine_seg,
+               aes(x = x, y = y, xend = xend, yend = yend),
+               color = "#FCB322"
+) +
+    geom_segment(aes(x = 2000, y = 0.35, xend = 2000, yend = 0.45),
+                 color = "#D62828"
+    ) +
+    geom_label(aes(x = c(2004, 2007.5, 2014),
+                   y = rep(0.77, 3),
+                   label = c("Orange\nRevolution",
+                             "Yushchenko's\npresidency",
+                             "Revolution of Dignity;\nIndependence of Crimea,\nDonetsk and Luhansk ")
+    ),
+    label.size = NA,
+    size = 3,
+    label.padding = unit(0, "lines")
+    ) +
+    geom_label(aes(x = 2000, y = 0.4, label = "Putin took office"),
+               label.size = NA,
+               size = 3
+    )
+```
+It seems freedom of expression and freedom of association and assembly are highly correlated. The trends and turning points are much the same as what we saw in the previous graph.
+
+### Freedom of religion
+
+A separate subcomponent index comprised of two [V-Dem](https://v-dem.net/) general indicators on religious freedom based on expert surveys and two similarly broad in-house coded variables from [CLD](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/0TKJWX) and [CIRIGHTS](http://www.humanrightsdata.com/). The four indicators were
+aggregated into the freedom of religion subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("freedom_of_religion_A2") +
+    expand_limits(y = c(0.3, 0.7))
+```
+
+Aside from the period of 2012-2016 during which Ukraine's freedom of religion declined, both countries experienced a steady state of freedom of religion in the last 20 years.
+
+### Freedom of movement
+
+Freedom of movement was captured by a general, in-house coded indicator from [CLD](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/0TKJWX), two specific in-house coded indicators from [CIRIGHTS](http://www.humanrightsdata.com/) and three, more specific, expert coded indicators from [V-Dem](https://v-dem.net/) that distinguish between
+foreign and domestic movement and provide assessments of the latter feature for men and women. The six indicators were aggregated into the freedom of movement subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("freedom_of_movement_A2") +
+  geom_segment(aes(x = rep(c(2010, 2014), 2),
+                   y = c(rep(0.9, 2), rep(0.4, 2)),
+                   xend = rep(c(2010, 2014), 2),
+                   yend = c(rep(0.95, 2), rep(0.45, 2))
+                   ),
+                color = "#FCB322"
+               ) +
+  geom_label(aes(x = 2012,
+                 y = 0.92,
+                 label = "Yanukovych's\npresidency"
+                 ),
+             label.size = NA,
+             label.padding = unit(0, "lines"),
+             size = 3
+             )
+```
+
+We can detect a significant decreasing pattern for Ukraine's freedom of movement under Yanukovych's administration. Surely, it is not a coincidence that his last year in office triggered the [Revolution of Dignity](https://en.wikipedia.org/wiki/Revolution_of_Dignity) and caused a further curtailment of freedom of movement in both countries.
+
+### Personal integrity and security
+
+Five indicators capture different types of violations, such as forced labor, torture, and political and extra-judicial disappearances and killings. To capture personal security more broadly, two general indicators on political violence and physical integrity rights were also included, which pertain to different types of human rights violations, conflict and, violence and distinguishes between various levels. The seven indicators were aggregated into the personal integrity and security subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("personal_integrity_and_security_A2") +
+  geom_segment(aes(x = rep(c(2005, 2014), 2),
+                   y = c(rep(0.52, 2), rep(0.25, 2)),
+                   xend = rep(c(2005, 2014), 2),
+                   yend = c(rep(0.58, 2), rep(0.28, 2))
+                   ),
+                 color = "#FCB322"
+) +
+    geom_label(aes(x = c(2005, 2014),
+                   y = rep(0.55, 2),
+                   label = c("Yushchenko became\npresident",
+                             "The Dignity Revolution")
+    ),
+    label.size = NA,
+    size = 3
+    )
+```
+Ukraine's state of personal integrity and security reached its peak after Yushchenko took the office, then it descended to its valley after [The Revolution of Dignity](https://en.wikipedia.org/wiki/Revolution_of_Dignity). In Russia, the value is decreasing constantly with a small slope.
+
+### Social group equality
+
+Five [V-Dem](https://v-dem.net/) expert-coded indicators and four [V-Dem](https://v-dem.net/) indices were used to measure social group equality, the first of the social rights and equality subcomponents. Four of the underlying questions ask about social class and identity group inequalities with regard to civil liberties and political power distribution. The fifth asks about the representation of disadvantaged social groups. Four indices provide measures of socio-economic, political, social and urban-rural exclusion. One additional indicator from [International Country Risk Guider (ICRG)](https://www.prsgroup.com/explore-our-products/international-country-risk-guide/) reflects the extent of religious and/or ethnic tensions. The ten indicators were aggregated into the social group equality subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("social_group_equality_A2") +
+  geom_segment(aes(x = rep(2014, 2),
+                   y = c(0.62, 0.45),
+                   xend = rep(2014, 2),
+                   yend = c(0.7, 0.47)
+                   ),
+               color = "#FCB322"
+               ) +
+  geom_label(aes(x = 2014,
+                 y = 0.66,
+                 label = "The independence of\nCrimea, Donetsk and Luhansk"
+                 ),
+             label.size = NA,
+             size = 3
+             )
+```
+
+The social group equality state has consistently deteriorated after the dissolution of the Soviet Union in 1991. Moreover, the situation became worse in Ukraine after the independence of Crimea, Donetsk, and Luhansk.
+
+### Basic welfare
+
+The provision of basic welfare is measured using standard observable human development indicators: infant mortality rate, life expectancy, kilocalories per person per day, literacy rate and average years of schooling. In
+addition, two expert-based indicators from [V-Dem](https://v-dem.net/) were included that assess whether everyone in a given society has access to basic education and health care. All the indicators reflect the extent to which the basic needs of the population are being met. The seven indicators were aggregated into the basic welfare subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("basic_welfare_A2") +
+  geom_segment(aes(x = 2014,
+                   y = 0.4,
+                   xend = 2014,
+                   yend = 0.5
+                   ),
+               color = "#FCB322"
+               ) +
+  geom_label(aes(x = 2017,
+                 y = 0.45,
+                 label = "Poroshenko &\nZelenskyy"
+                 ),
+             label.size = NA,
+             size = 3,
+             label.padding = unit(0, "lines")
+             )
+```
+Both countries improved their basic welfare in the past 30 years, and are ahead of the world's average in this regard. However, Ukraine started to lag behind Russia after Poroshenko's presidency.
+
+### Gender equality
+
+Three expert-coded indicators from [V-Dem](https://v-dem.net/) were used to operationalize gender equality—power distribution by gender, female participation in civil society organizations and gender-based exclusion—as well as two expert-coded indicators from [CIRIGHTS](http://www.humanrightsdata.com/) on women’s political and economic rights. Two observational indicators are also included on the ratio between female and male mean years of schooling ([IHME](https://www.healthdata.org/)), and the proportion of lower chamber female legislators ([V-Dem](https://v-dem.net/)). The seven indicators were aggregated into the gender equality subcomponent using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("gender_equality_A2") +
+  geom_segment(aes(x = rep(c(2005, 2010), 2),
+                   y = c(rep(0.75, 2), rep(0.45, 2)),
+                   xend = rep(c(2005, 2010), 2),
+                   yend = c(rep(0.78, 2), rep(0.47, 2))
+                   ),
+               color = "#FCB322"
+               ) +
+  geom_label(aes(x = 2007.5,
+                 y = 0.765,
+                 label = "Yushchenko's\npresidency"
+                 ),
+             label.size = NA,
+             size = 3,
+             label.padding = unit(0, "lines")
+             )
+```
+
+Yushchenko's presidency was a great leap for gender equality in Ukraine. He struggled to adopt the EU's gender equality standards in Ukraine^[https://www.reed.edu/sociology/faculty/hrycak/publications/Hrycak_Gender-OrangeRev.pdf]. In comparison to Ukraine, Russia's gender equality during Putin-era is inferior but stable. 
+
+## Checks on government
+
+Besides regular elections, the exercise of political power needs to be continuously subjected to scrutiny. If the other branches of government (the legislature and the judiciary) or a critical and pluralistic press do not check
+executive power, they are more prone to be abused for private gain and too biased political decision-making and implementation. Vertical accountability through elections should be supplemented by horizontal accountability between elections. The three subattributes were aggregated into the Checks on Government index using [Bayesian factor analysis](https://en.wikipedia.org/wiki/Bayes_factor).
+
+### Effective parliament
+
+The effectiveness of parliament subattribute denotes the extent to which the legislature is capable of overseeing the executive. It includes three indicators from the [V-Dem](https://v-dem.net/) experts' survey that tap fairly directly into the effectiveness of parliament. Another [V-Dem](https://v-dem.net/) indicator on executive oversight and the executive constraints indicator from [Polity](https://www.systemicpeace.org/polityproject.html) are included as they capture relevant aspects of institutional Checks on Government not covered by judicial independence and media integrity. The five indicators were aggregated into the media integrity subattribute using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("effective_parliament_A3") +
+  geom_segment(aes(x = 2000, y = 0.3, xend = 2000, yend = 0.42),
+               color = "#D62828"
+) +
+    geom_label(aes(x = 2000, 
+                   y = 0.36,
+                   label = "Putin became president"
+    ),
+    label.size = NA,
+    size = 3
+    )
+```
+Although Ukraine's state of *effective parliament* waxed and waned several times Putin's Russia didn't fare as well as Ukraine in this subattribute. As the latest data shows, Ukraine's performance was far better than Russia's and on top of the world's average.
+
+### Judicial independence
+
+The judicial independence subattribute denotes the extent to which the courts are not subject to undue influence from the other branches of government, especially the executive. Since the current framework places judicial independence under the attribute concerning Checks on Government, it is important to supplement the four judicial independence indicators with two indicators on government compliance with the courts. The six indicators were aggregated into the media integrity subattribute using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("judicial_independence_A3") +
+    geom_segment(aes(x = 2000, y = 0.1, xend = 2000, yend = 0.24),
+                 color = "#D62828"
+    ) +
+    geom_label(aes(x = 2000, 
+                   y = 0.17,
+                   label = "Putin became president"
+    ),
+    label.size = NA,
+    size = 3
+    )
+```
+
+Unsurprisingly, Putin nearly annihilated judicial independence which is a nuisance for a dictatorship. Ukraine did a better job than Russia, but both are below the world's average.
+
+### Media integrity
+
+The media integrity subattribute denotes the extent to which the media landscape offers diverse and critical coverage of political issues. Media integrity and freedom of expression are related. Nonetheless, the media can do a poor job controlling the government even in a situation of media freedom if they are very one-sided, uncritical, superficial or corrupt. [V-Dem](https://v-dem.net/) offers indicators that reflect these additional circumstances. These indicators are based on expert surveys in addition to an in-house coded indicator from [the Global Media Freedom Dataset](https://www.cambridge.org/core/journals/political-science-research-and-methods/article/abs/correlates-of-media-freedom-an-introduction-of-the-global-media-freedom-dataset/F9B43F3F909BD00302DB32C9BD4E05A3) (MFD), which indicates whether the media are critical of the government and its officials. The five indicators were aggregated into the media integrity subattribute using [Bayesian factor analysis](https://en.wikipedia.org/wiki/Bayes_factor).
+
+```{r}
+Ukraine_seg <- tibble(x = rep(c(1994, 2005, 2010, 2014, 2019), 2),
+                      y = c(rep(0.75, 5), rep(0.3, 5)),
+                      xend = rep(c(1994, 2005, 2010, 2014, 2019), 2),
+                      yend = c(rep(0.8, 5), rep(0.34, 5))
+                      )
+Ukraine_presidents <- tibble(x = c(1992.5, 2000, 2007.5, 2012, 2016.5, 2021),
+                             y = rep(0.78, 6),
+                             label = c("Kravchuk", "Kuchma", "Yushchenko",                                             "Yanukovych", "Poroshenko", "Zelenskyy")
+                             )
+                      
+graph_index("media_integrity_A3") +
+  geom_segment(data = Ukraine_seg, 
+               aes(x = x, y = y, xend = xend, yend = yend),
+               color = "#FCB322"
+               ) +
+  geom_segment(aes(x = 2000, y = 0.3, xend = 2000, yend = 0.44),
+               color = "#D62828"
+               ) +
+  geom_label(aes(x = 2000, y = 0.37,
+                 label = "Putin became president"
+                 ),
+             label.size = NA,
+             size = 3
+             ) +
+  geom_label(data = Ukraine_presidents,
+             aes(x = x,
+                 y = y,
+                 label = label
+                 ),
+             label.size = NA,
+             size = 3,
+             label.padding = unit(0, "lines")
+             )
+```
+
+
+## Impartial administration
+
+The government and the public administration more generally should implement official public policies in an impartial manner. If the implementation is unfair and unpredictable, large discrepancies between official laws and policies, on the one hand, and practices, on the other, undermine democratic principles. Thus,
+democracy is a matter not only of access to power and control of power, but also of the exercise of power. Since Impartial Administration to a large extent overlaps with the concept of the rule of law, this attribute is also rooted in the tradition that emphasizes the liberal aspects of democracy. The two subattributes were aggregated into the Impartial Administration index using [Bayesian factor analysis](https://en.wikipedia.org/wiki/Bayes_factor).
+
+### Absence of corruption
+
+The absence of corruption subattribute denotes the extent to which the executive and the public administration, more broadly, do not abuse their office for personal gain. Four [V-Dem](https://v-dem.net/) indicators explicitly refer to corruption in the
+government broadly understood, i.e., the executive and public administration more generally (but excluding courts and parliaments). In addition to these, [the Global State of Democracy](https://www.idea.int/gsod/) makes use of another expert-coded but broader indicator on government corruption from the [International Country Risk Guider (ICRG)](https://www.prsgroup.com/explore-our-products/international-country-risk-guide/) data set. The five indicators have been aggregated into the absence of corruption subattribute using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+
+Ukraine_seg <- tibble(x = rep(c(1994, 2005, 2010, 2014, 2019), 2),
+                      y = c(rep(0.48, 5), rep(0.16, 5)),
+                      xend = rep(c(1994, 2005, 2010, 2014, 2019), 2),
+                      yend = c(rep(0.5, 5), rep(0.18, 5))
+                      )
+
+graph_index("absence_of_corruption_A4") +
+  geom_segment(data = Ukraine_seg, 
+               aes(x = x, y = y, xend = xend, yend = yend),
+               color = "#FCB322"
+               ) +
+  geom_segment(aes(x = 2000, y = 0.16, xend = 2000, yend = 0.22),
+               color = "#D62828"
+               ) +
+  geom_label(aes(x = 2000, y = 0.18,
+                 label = "Putin became president"
+                 ),
+             label.size = NA,
+             size = 3
+             ) +
+  geom_label(data = Ukraine_presidents,
+             aes(x = x, y = 0.49, label = label),
+             label.size = NA,
+             size = 3,
+             label.padding = unit(0, "lines")
+             )
+```
+
+With every new president in Ukraine, we can detect a different trend in the state of *absence of corruption*. Russia after Putin improved slowly but constantly.
+
+### Predictable enforcement
+
+The predictable enforcement subattribute denotes the extent to which the executive and public officials enforce laws in a predictable manner. To measure predictable enforcement, five expert-coded [V-Dem](https://v-dem.net/) indicators were included: the executive’s respect for constitutional provisions, the presence of transparent laws with predictable enforcement, rule-abidingness in the public sector, meritocratic appointment criteria in the state administration and armed forces. To these was added an indicator from the [International Country Risk Guider (ICRG)](https://www.prsgroup.com/explore-our-products/international-country-risk-guide/) (also expert-coded) on the strength and expertise of the bureaucracy. The six indicators were aggregated into the predictable enforcement subattribute
+using [item response theory](https://en.wikipedia.org/wiki/Item_response_theory).
+
+```{r}
+graph_index("predictable_enforcement_A4") +
+  geom_segment(aes(x = 2014,
+                   y =  0.08,
+                   xend = 2014,
+                   yend =  0.25
+                   ),
+               color = "#FCB322"
+               ) +
+  geom_label(aes(x = c(2014, 2017),
+                 y = c(0.2, 0.13),
+                 label = c("Independence of Crimea,\nDonetsk and Luhansk",
+                           "Poroshenko &\nZelenskyy")
+                 ),
+             label.size = NA,
+             label.padding = unit(0, "lines"),
+             size = 3
+             )
+```
+
+Except for The [Revolution of Dignity](https://en.wikipedia.org/wiki/Revolution_of_Dignity), which plummeted Ukraine's score, both countries fared very similarly. Since 2014 under Poroshenko and Zelenskyy's administrations, Ukraine has improved in this subattribute.  
+
+## Participatory engagement
+
+Participatory Engagement represents the fifth of the five attributes of democracy developed by International [IDEA](https://www.idea.int/gsod/)’s Global State of Democracy Indices.
+
+### Civil society participation
+
+The measurement of civil society participation relies on six [V-Dem](https://v-dem.net/) indicators. They result from an expert survey and consider the extent to which the population is engaged in civil society activities, including political associations and independent trade unions. 
+
+
+```{r}
+Ukraine_seg = tibble(x = rep(c(2014, 2015, 2019), 2),
+                     y = c(rep(0.64, 3), rep(0.4, 3)),
+                     xend = rep(c(2014, 2015, 2019), 2),
+                     yend = c(c(0.7, rep(0.67,2)), rep(0.43, 3))
+                     )
+graph_index("civil_society_participation_A5") +
+  geom_segment(data = Ukraine_seg, 
+               aes(x = x, y = y, xend = xend, yend = yend),
+               color = "#FCB322"
+               ) +
+  geom_segment(aes(x = 2000, y = 0.4, xend = 2000, yend = 0.44),
+               color = "#D62828"
+               ) +
+  geom_label(aes(x = c(2014, 2017, 2020.5),
+                 y = c(0.69, rep(0.65, 2)),
+                 label = c("The Revolution of Dignity",
+                           "Poroshenko",
+                           "Zelenskyy")
+                 ),
+             label.size = NA,
+             label.padding = unit(0, "lines"),
+             size = 3
+             ) +
+  geom_label(aes(x = 2000, y = 0.42,
+                 label = "Putin became president"
+                 ),
+             label.size = NA,
+             size = 3
+             )
+```
+*Civil society participation* deteriorated in Russia after Putin took the office but remained constant. Unlike most of the previous subattributes in Ukraine which worsened as a result of [The Revolution of Dignity](https://en.wikipedia.org/wiki/Revolution_of_Dignity), this subattribute improved after the revolution. During Poroshenko's term, *civil society* improved then worsened due to his controversial decisions^[https://www.wilsoncenter.org/publication/kennan-cable-no25-wake-call-for-ukraines-civil-society]. After Zelenskyy the situation improved again.
+
+### Electoral participation
+
+The level of electoral participation for the adult voting age population (VAP) in the last national election.
+
+```{r}
+graph_index("electoral_participation_A5") +
+    expand_limits(y = c(0.4, 0.85))
+```
+
+Ukraine's *electoral participation* declined during the past three decades. Russia had a somehow mixed result with many ups and downs.
+
+### Direct democracy
+
+[V-Dem](https://v-dem.net/) offers the only comprehensive data set in the form of the direct democracy index developed by David Altman (2016). It is based on observable variables on the formal opportunities for and actual use of different instruments of direct democracy at the national level. However, it seems pertinent to take into account whether mechanisms of direct democracy are available and used in a context where elections are generally respected as the main source of political power. To do so, the electoral indicator from [Regime Types and Regime Changes: A New Dataset](http://www.christianbjoernskov.com/bjoernskovrodedata/)(BRRD) is also used here. The measure of direct democracy and the electoral index are multiplied to estimate the subattribute score.
+
+```{r}
+graph_index("direct_democracy_A5") +
+  expand_limits(y = c(-0.08, 0.48))
+```
+
+[This article](https://www.jstor.org/stable/j.ctvddzwx6.24?seq=11#metadata_info_tab_contents) explains The problem of a declining state of *direct democracy* in Ukraine: "It should be said that the institutions of direct democracy,
+enveloped in populist slogans of Ukrainian politicians are a rather abstract
+form of expressing the will of the nation. There is also a psychological barrier
+and the lack of confidence in the authorities of public administration.
+Moreover, strikes and demonstrations after the social events of 2004 and
+2014 became a more effective form of influence on political decisions than
+going to the polls." On the other hand, a massive [constitutional referendum](https://en.wikipedia.org/wiki/2020_Russian_constitutional_referendum#Opinion_polls) was held in Russia in 2020 which improved the state of *direct democracy* in Russia after many years of stagnation.
+
+### Sub-national elections
+
+[V-Dem](https://v-dem.net/) is also the only provider of a comprehensive, cross-national dataset on subnational elections. The local government index indicates whether the local government is elected and whether it is empowered in relation to the central government, while another indicator assesses the freedom and fairness of subnational elections.
+
+```{r}
+graph_index("local_democracy_A5") +
+  geom_segment(aes(x = 2000, y = 0.25, xend = 2000, yend = 0.35),
+               color = "#D62828"
+               ) +
+  geom_label(aes(x = 2000, y = 0.3,
+                 label = "Putin became president"
+                 ),
+             label.size = NA,
+             size = 3
+             )
+```
+
+Regarding *local democracy*, Russia moved downward after Putin's inauguration in 2000 but finally improved in 2020. Ukraine's situation was more constant during the same period with occasional ups and downs.
+
+# Conclusion
+
+We saw throughout this notebook that after Putin took the helm in 2000, in comparison to the world and Ukraine, Russia's state of democracy declined in most of the attributes and subattributes. On the other hand, Zelenskyy's Ukraine improved significantly towards a full-fledged democracy. And guess what is the worst nightmare for a dictator? **A mature, strong, and thriving democracy in the neighborhood**.
+As a final word, Oksana Markarova, The Ukrainian ambassador to the US, made Putin's motivation in invading Ukraine clear:
+    
+    >We’re not a threat to Russia unless being a democracy and living peacefully in your own country is a threat.^[https://www.politico.com/news/2022/03/06/ukraine-no-fly-zone-00014437]
+
+# Acknowledgment
+
+This notebook is highly inspired by [R for political science](https://rforpoliticalscience.com/) website. It is a collection of beautiful visualizations of political data using R. Many thanks to the [International Institute for Democracy and Electoral Assistance](https://www.idea.int/) (International IDEA) who gathered and freely shared the comprehensive dataset of the Global State of Democracy (GSod).
